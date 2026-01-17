@@ -3,102 +3,168 @@
 
 repeat task.wait() until game:IsLoaded()
 
+-- ================= MAP LOCK =================
+local TARGET_PLACE_ID = 134922313437159
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
+local TeleportService = game:GetService("TeleportService")
 
 local player = Players.LocalPlayer
+
+if game.PlaceId ~= TARGET_PLACE_ID then
+    local parentGui = (gethui and gethui()) or player:WaitForChild("PlayerGui")
+
+    local lockGui = Instance.new("ScreenGui", parentGui)
+    lockGui.Name = "muzascript_maplock"
+
+    local bg = Instance.new("Frame", lockGui)
+    bg.Size = UDim2.new(1,0,1,0)
+    bg.BackgroundColor3 = Color3.new(0,0,0)
+    bg.BackgroundTransparency = 0.4
+
+    local box = Instance.new("Frame", bg)
+    box.Size = UDim2.new(0,360,0,160)
+    box.Position = UDim2.new(0.5,-180,0.5,-80)
+    box.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    box.BorderSizePixel = 0
+
+    local title = Instance.new("TextLabel", box)
+    title.Size = UDim2.new(1,0,0,40)
+    title.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    title.Text = "muzascript ❌"
+    title.TextColor3 = Color3.new(1,1,1)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 16
+
+    local desc = Instance.new("TextLabel", box)
+    desc.Position = UDim2.new(0,15,0,50)
+    desc.Size = UDim2.new(1,-30,0,50)
+    desc.BackgroundTransparency = 1
+    desc.TextWrapped = true
+    desc.Text = "Script ini hanya untuk map ini.\nPindah ke map yang benar?"
+    desc.TextColor3 = Color3.fromRGB(220,220,220)
+    desc.Font = Enum.Font.Gotham
+    desc.TextSize = 14
+
+    local yes = Instance.new("TextButton", box)
+    yes.Size = UDim2.new(0.4,0,0,32)
+    yes.Position = UDim2.new(0.08,0,1,-42)
+    yes.Text = "YES"
+    yes.BackgroundColor3 = Color3.fromRGB(50,120,60)
+    yes.TextColor3 = Color3.new(1,1,1)
+    yes.Font = Enum.Font.GothamBold
+
+    local no = Instance.new("TextButton", box)
+    no.Size = UDim2.new(0.4,0,0,32)
+    no.Position = UDim2.new(0.52,0,1,-42)
+    no.Text = "NO"
+    no.BackgroundColor3 = Color3.fromRGB(90,40,40)
+    no.TextColor3 = Color3.new(1,1,1)
+    no.Font = Enum.Font.GothamBold
+
+    yes.MouseButton1Click:Connect(function()
+        TeleportService:Teleport(TARGET_PLACE_ID)
+    end)
+
+    no.MouseButton1Click:Connect(function()
+        lockGui:Destroy()
+    end)
+
+    return
+end
+
+-- ================= NOTIFICATION =================
+pcall(function()
+    StarterGui:SetCore("SendNotification",{
+        Title = "muzascript",
+        Text = "Auto Infect Grab Loaded\nmade by muzascript",
+        Duration = 4
+    })
+end)
+
+-- ================= CORE =================
 local enabled = false
 local conn
 local target
 local lastGrab = 0
-local grabCooldown = 0.35 -- FAST & STABLE
+local grabCooldown = 0.35
 
--- ===== NOTIFICATION =====
-pcall(function()
-	StarterGui:SetCore("SendNotification",{
-		Title = "muzascript",
-		Text = "Auto Infect Grab Loaded\nmade by muzascript",
-		Duration = 4
-	})
-end)
-
--- ===== CHARACTER =====
 local function char()
-	return player.Character or player.CharacterAdded:Wait()
+    return player.Character or player.CharacterAdded:Wait()
 end
 
 local function hrp()
-	return char():WaitForChild("HumanoidRootPart")
+    return char():WaitForChild("HumanoidRootPart")
 end
 
--- ===== TOOL SYSTEM (GRAB ONLY) =====
 local function getGrabTool()
-	for _,v in ipairs(char():GetChildren()) do
-		if v:IsA("Tool") and string.find(v.Name:lower(),"ambil")
-		or string.find(v.Name:lower(),"take")
-		or string.find(v.Name:lower(),"grab") then
-			return v
-		end
-	end
-	for _,v in ipairs(player.Backpack:GetChildren()) do
-		if v:IsA("Tool") and (
-			string.find(v.Name:lower(),"ambil")
-			or string.find(v.Name:lower(),"take")
-			or string.find(v.Name:lower(),"grab")
-		) then
-			v.Parent = char()
-			return v
-		end
-	end
+    for _,v in ipairs(char():GetChildren()) do
+        if v:IsA("Tool") and (
+            v.Name:lower():find("ambil") or
+            v.Name:lower():find("take") or
+            v.Name:lower():find("grab")
+        ) then
+            return v
+        end
+    end
+    for _,v in ipairs(player.Backpack:GetChildren()) do
+        if v:IsA("Tool") and (
+            v.Name:lower():find("ambil") or
+            v.Name:lower():find("take") or
+            v.Name:lower():find("grab")
+        ) then
+            v.Parent = char()
+            return v
+        end
+    end
 end
 
--- ===== TARGET =====
 local function validTarget(t)
-	if not t or not t.Parent then return false end
-	local p = Players:GetPlayerFromCharacter(t.Parent)
-	if not p or p == player then return false end
-	if p.Team == player.Team then return false end
-	return true
+    if not t or not t.Parent then return false end
+    local p = Players:GetPlayerFromCharacter(t.Parent)
+    if not p or p == player then return false end
+    if p.Team == player.Team then return false end
+    return true
 end
 
 local function findTarget()
-	local my = hrp()
-	local best,dist = nil,math.huge
-	for _,plr in ipairs(Players:GetPlayers()) do
-		if plr ~= player
-		and plr.Team ~= player.Team
-		and plr.Character
-		and plr.Character:FindFirstChild("HumanoidRootPart") then
-			local t = plr.Character.HumanoidRootPart
-			local d = (my.Position - t.Position).Magnitude
-			if d < dist then
-				dist = d
-				best = t
-			end
-		end
-	end
-	return best
+    local my = hrp()
+    local best,dist = nil,math.huge
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player
+        and plr.Team ~= player.Team
+        and plr.Character
+        and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local t = plr.Character.HumanoidRootPart
+            local d = (my.Position - t.Position).Magnitude
+            if d < dist then
+                dist = d
+                best = t
+            end
+        end
+    end
+    return best
 end
 
--- ===== BODY CONTROL (STABLE) =====
 local gyro,vel
 local function enableMove()
-	gyro = Instance.new("BodyGyro", hrp())
-	gyro.MaxTorque = Vector3.new(0,9e9,0)
-	gyro.P = 5000
+    gyro = Instance.new("BodyGyro", hrp())
+    gyro.MaxTorque = Vector3.new(0,9e9,0)
+    gyro.P = 5000
 
-	vel = Instance.new("BodyVelocity", hrp())
-	vel.MaxForce = Vector3.new(9e9,0,9e9)
+    vel = Instance.new("BodyVelocity", hrp())
+    vel.MaxForce = Vector3.new(9e9,0,9e9)
 end
 
 local function disableMove()
-	if gyro then gyro:Destroy() end
-	if vel then vel:Destroy() end
-	gyro,vel=nil,nil
+    if gyro then gyro:Destroy() end
+    if vel then vel:Destroy() end
+    gyro,vel=nil,nil
 end
 
--- ===== GUI =====
+-- ================= GUI =================
 local gui = Instance.new("ScreenGui", game.CoreGui)
 gui.Name = "muzascript_autograb"
 
@@ -108,9 +174,7 @@ frame.Position = UDim2.new(0.35,0,0.6,0)
 frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
 frame.Active = true
 frame.Draggable = true
-frame.BorderSizePixel = 0
 
--- TITLE BAR
 local bar = Instance.new("Frame", frame)
 bar.Size = UDim2.new(1,0,0,25)
 bar.BackgroundColor3 = Color3.fromRGB(40,40,40)
@@ -126,13 +190,11 @@ local minBtn = Instance.new("TextButton", bar)
 minBtn.Size = UDim2.new(0,25,1,0)
 minBtn.Position = UDim2.new(1,-50,0,0)
 minBtn.Text = "_"
-minBtn.TextScaled = true
 
 local closeBtn = Instance.new("TextButton", bar)
 closeBtn.Size = UDim2.new(0,25,1,0)
 closeBtn.Position = UDim2.new(1,-25,0,0)
 closeBtn.Text = "X"
-closeBtn.TextScaled = true
 closeBtn.BackgroundColor3 = Color3.fromRGB(120,0,0)
 
 local btn = Instance.new("TextButton", frame)
@@ -149,56 +211,49 @@ credit.TextColor3 = Color3.fromRGB(0,255,140)
 credit.TextScaled = true
 credit.BackgroundTransparency = 1
 
--- ===== CORE =====
 btn.MouseButton1Click:Connect(function()
-	enabled = not enabled
-	btn.Text = enabled and "👁️ ON" or "👁️ OFF"
+    enabled = not enabled
+    btn.Text = enabled and "👁️ ON" or "👁️ OFF"
 
-	if enabled then
-		enableMove()
-		conn = RunService.RenderStepped:Connect(function()
-			if not validTarget(target) then
-				target = findTarget()
-			end
-			if not target then return end
+    if enabled then
+        enableMove()
+        conn = RunService.RenderStepped:Connect(function()
+            if not validTarget(target) then
+                target = findTarget()
+            end
+            if not target then return end
 
-			local my = hrp()
-			local dir = target.Position - my.Position
-			local flat = Vector3.new(dir.X,0,dir.Z)
+            local my = hrp()
+            local dir = target.Position - my.Position
+            local flat = Vector3.new(dir.X,0,dir.Z)
 
-			gyro.CFrame = CFrame.lookAt(my.Position, target.Position)
+            gyro.CFrame = CFrame.lookAt(my.Position, target.Position)
 
-			if flat.Magnitude > 1.6 then
-				vel.Velocity = flat.Unit * 40
-			else
-				vel.Velocity = Vector3.zero
-			end
+            vel.Velocity = flat.Magnitude > 1.6 and flat.Unit * 40 or Vector3.zero
 
-			local tool = getGrabTool()
-			if tool and tick() - lastGrab > grabCooldown then
-				tool:Activate() -- AUTO TAP
-				lastGrab = tick()
-			end
-		end)
-	else
-		if conn then conn:Disconnect() end
-		target=nil
-		disableMove()
-	end
+            local tool = getGrabTool()
+            if tool and tick() - lastGrab > grabCooldown then
+                tool:Activate()
+                lastGrab = tick()
+            end
+        end)
+    else
+        if conn then conn:Disconnect() end
+        target=nil
+        disableMove()
+    end
 end)
 
--- MINIMIZE
 local mini=false
 minBtn.MouseButton1Click:Connect(function()
-	mini = not mini
-	btn.Visible = not mini
-	credit.Visible = not mini
-	frame.Size = mini and UDim2.new(0,210,0,25) or UDim2.new(0,210,0,95)
+    mini = not mini
+    btn.Visible = not mini
+    credit.Visible = not mini
+    frame.Size = mini and UDim2.new(0,210,0,25) or UDim2.new(0,210,0,95)
 end)
 
--- CLOSE
 closeBtn.MouseButton1Click:Connect(function()
-	if conn then conn:Disconnect() end
-	disableMove()
-	gui:Destroy()
+    if conn then conn:Disconnect() end
+    disableMove()
+    gui:Destroy()
 end)
